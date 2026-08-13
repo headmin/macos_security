@@ -22,10 +22,13 @@ from unittest import mock
 import pytest
 
 from mscp.generate.guidance_support.documents import (
+    DEFAULT_THEME,
+    _deep_merge,
     _generate_typst_pdf,
     asciidoc_to_html,
     asciidoc_to_typst,
     group_ulify_typst,
+    load_theme,
     render_references_html,
     render_references_typst,
     render_rules_html,
@@ -302,6 +305,72 @@ class TestHtmlWellFormed:
         p = _P()
         p.feed(f"<div>{frag}</div>")
         assert depth["open"] == depth["close"], frag
+
+
+# --------------------------------------------------------------------------- #
+# Admonitions — every AsciiDoc kind (plus the mSCP ALERT extension) in both
+# line-prefix and delimited-block form, for both engines.
+# --------------------------------------------------------------------------- #
+class TestAdmonitions:
+    @pytest.mark.parametrize(
+        "kind", ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION", "ALERT"]
+    )
+    def test_line_prefix_typst(self, kind):
+        out = asciidoc_to_typst(f"{kind}: mind the gap")
+        assert f'#admonition("{kind}")[mind the gap]' in out
+
+    @pytest.mark.parametrize(
+        "kind", ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION", "ALERT"]
+    )
+    def test_line_prefix_html(self, kind):
+        out = asciidoc_to_html(f"{kind}: mind the gap")
+        assert f'class="admonitionblock {kind.lower()}"' in out
+        assert "mind the gap" in out
+
+    def test_block_form_typst(self):
+        out = asciidoc_to_typst("[WARNING]\n====\nline one\nline two\n====")
+        assert '#admonition("WARNING")[line one line two]' in out
+
+    def test_block_form_html(self):
+        out = asciidoc_to_html("[ALERT]\n====\nred alert\n====")
+        assert 'class="admonitionblock alert"' in out
+        assert "red alert" in out
+
+    def test_plain_bracket_attribute_still_skipped(self):
+        # [cols=...] etc. must not be mistaken for admonition blocks
+        assert "cols" not in asciidoc_to_typst('[cols="1,1"]')
+
+
+# --------------------------------------------------------------------------- #
+# theme.yaml — token loading and deep-merge semantics.
+# --------------------------------------------------------------------------- #
+class TestTheme:
+    def test_bundled_theme_loads_and_is_complete(self):
+        theme = load_theme()
+        for kind in ("note", "important", "warning", "alert"):
+            for mode in ("light", "dark"):
+                assert theme["admonitions"][kind][mode]["color"].startswith("#")
+                assert theme["admonitions"][kind][mode]["background"].startswith("#")
+        assert theme["fonts"]["pdf"]["base_size"] > 0
+        assert theme["fonts"]["html"]["base_size"] > 0
+
+    def test_partial_override_keeps_other_tokens(self):
+        override = {"admonitions": {"warning": {"light": {"background": "#123456"}}}}
+        merged = _deep_merge(DEFAULT_THEME, override)
+        assert merged["admonitions"]["warning"]["light"]["background"] == "#123456"
+        # sibling token of the overridden one survives
+        assert (
+            merged["admonitions"]["warning"]["light"]["color"]
+            == DEFAULT_THEME["admonitions"]["warning"]["light"]["color"]
+        )
+        # unrelated kinds and fonts survive
+        assert merged["admonitions"]["note"] == DEFAULT_THEME["admonitions"]["note"]
+        assert merged["fonts"] == DEFAULT_THEME["fonts"]
+
+    def test_deep_merge_does_not_mutate_defaults(self):
+        before = DEFAULT_THEME["admonitions"]["warning"]["light"]["background"]
+        _deep_merge(DEFAULT_THEME, {"admonitions": {"warning": {"light": {"background": "#000000"}}}})
+        assert DEFAULT_THEME["admonitions"]["warning"]["light"]["background"] == before
 
 
 # --------------------------------------------------------------------------- #

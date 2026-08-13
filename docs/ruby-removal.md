@@ -83,3 +83,30 @@ purpose-built.
   edge case (cosmetic warning); worth fixing in the converters.
 - **Localization**: both new trees use the same gettext `{% trans %}` strings,
   so translations carry over — verify non-`en` languages render.
+
+## Theming (replaces `mscp_theme.yml`)
+
+Formatting is driven by `src/mscp/data/themes/theme.yaml`, shared by **both**
+engines — one edit changes the PDF and the HTML. Copy it to
+`custom/themes/theme.yaml` and override only the tokens you need:
+
+```yaml
+fonts:
+  pdf: { family: "Helvetica Neue", mono_family: "Menlo", base_size: 11 }
+  html: { base_size: 1.05 }
+admonitions:
+  warning:
+    light: { color: "#8A6D00", background: "#FFF9C4" }  # yellow
+  alert:
+    light: { color: "#C62828", background: "#FDECEA" }  # red
+```
+
+- `fonts.pdf.*` maps to typst `#set text(...)`; heading and code-block sizes
+  scale from `base_size`. `fonts.html.*` is emitted as a CSS override on top of
+  the inlined stylesheet. `null` keeps the engine default.
+- Admonition kinds: `note`, `important`, `warning`, `alert` (an mSCP extension;
+  `CAUTION` shares warning colors, `TIP` shares note colors). Both `WARNING: …`
+  line-prefix and `[WARNING]` block forms are recognised in rule content.
+- Beyond tokens, whole files can still be shadowed: drop a modified
+  `header.typ.jinja` in `custom/templates/documents/typst/` or a modified
+  `asciidoctor.css` in `custom/themes/`.

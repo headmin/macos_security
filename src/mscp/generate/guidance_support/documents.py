@@ -204,6 +204,15 @@ _TYPST_ESCAPE: dict[str, str] = {
     "]": "\\]",
 }
 
+# AsciiDoc admonition forms recognised by the typst/HTML converters, both as a
+# line prefix ("WARNING: ...") and as a delimited block ("[WARNING]\n====\n...").
+# ALERT is an mSCP extension on top of the standard AsciiDoc kinds; colors for
+# each kind come from themes/theme.yaml (CAUTION and TIP reuse WARNING/NOTE
+# colors in the templates).
+_ADMONITION_KINDS = r"NOTE|TIP|IMPORTANT|WARNING|CAUTION|ALERT"
+_ADMONITION_LINE = re.compile(rf"^({_ADMONITION_KINDS}):\s?(.*)$")
+_ADMONITION_BLOCK = re.compile(rf"^\[({_ADMONITION_KINDS})\]$")
+
 def typst_escape(value: Any) -> str:
     """Backslash-escape every Typst-significant character in *value*.
 
@@ -367,23 +376,26 @@ def asciidoc_to_typst(value: str) -> str:
             result.extend(code_lines)
             result.append("```")
 
-        # NOTE: admonition -> tinted callout box (see admonition() in header.typ.jinja)
-        elif line.startswith("NOTE:"):
-            result.append(f'#admonition("NOTE")[{_inline(line[5:].strip())}]')
+        # NOTE:/WARNING:/... admonition -> tinted callout box
+        # (see admonition() in header.typ.jinja)
+        elif _adm := _ADMONITION_LINE.match(line):
+            kind, body = _adm.group(1), _adm.group(2)
+            result.append(f'#admonition("{kind}")[{_inline(body.strip())}]')
 
-        # [IMPORTANT] admonition block -> tinted callout box
+        # [IMPORTANT]/[WARNING]/... admonition block -> tinted callout box
         elif (
-            line.strip() == "[IMPORTANT]"
+            (_adm := _ADMONITION_BLOCK.match(line.strip()))
             and i + 1 < len(lines)
             and lines[i + 1].strip() == "===="
         ):
+            kind = _adm.group(1)
             i += 2
             important_lines: list[str] = []
             while i < len(lines) and lines[i].strip() != "====":
                 important_lines.append(lines[i].strip())
                 i += 1
             result.append(
-                f'#admonition("IMPORTANT")[{_inline(" ".join(important_lines))}]'
+                f'#admonition("{kind}")[{_inline(" ".join(important_lines))}]'
             )
 
         # Skip AsciiDoc block attribute lines, e.g. [cols=...], [width=...]
@@ -530,21 +542,22 @@ def asciidoc_to_html(value: str) -> str:
                 '<div class="listingblock"><div class="content">'
                 f'<pre class="highlight"><code>{body}</code></pre></div></div>'
             )
-        elif line.startswith("NOTE:"):
+        elif _adm := _ADMONITION_LINE.match(line):
             flush_blocks()
-            result.append(_admonition("NOTE", _inline(line[5:].strip())))
+            result.append(_admonition(_adm.group(1), _inline(_adm.group(2).strip())))
         elif (
-            line.strip() == "[IMPORTANT]"
+            (_adm := _ADMONITION_BLOCK.match(line.strip()))
             and i + 1 < len(lines)
             and lines[i + 1].strip() == "===="
         ):
             flush_blocks()
+            kind = _adm.group(1)
             i += 2
             imp: list[str] = []
             while i < len(lines) and lines[i].strip() != "====":
                 imp.append(lines[i].strip())
                 i += 1
-            result.append(_admonition("IMPORTANT", _inline(" ".join(imp))))
+            result.append(_admonition(kind, _inline(" ".join(imp))))
         elif re.match(r"^\[(cols|width|options|grid|frame|stripes|%|role).*\]$", line):
             pass
         elif line.strip().startswith("* "):
@@ -774,6 +787,62 @@ def _resolve_asset_dir(filename: str, dir_key: str) -> str:
     return config[dir_key]
 
 
+# Fallback theme tokens, mirroring the bundled themes/theme.yaml. Guarantees
+# every token the templates reference exists even when a custom theme.yaml
+# only overrides a subset (or the bundled file is missing entirely).
+DEFAULT_THEME: dict[str, Any] = {
+    "fonts": {
+        "pdf": {"family": None, "mono_family": None, "base_size": 10},
+        "html": {"family": None, "mono_family": None, "base_size": 1.0},
+    },
+    "admonitions": {
+        "note": {
+            "light": {"color": "#1565C0", "background": "#E8F1FB"},
+            "dark": {"color": "#89B4FA", "background": "#223047"},
+        },
+        "important": {
+            "light": {"color": "#B26A00", "background": "#FFF4E5"},
+            "dark": {"color": "#F9E2AF", "background": "#2E2A1E"},
+        },
+        "warning": {
+            "light": {"color": "#8A6D00", "background": "#FFF9C4"},
+            "dark": {"color": "#F9E2AF", "background": "#3A331A"},
+        },
+        "alert": {
+            "light": {"color": "#C62828", "background": "#FDECEA"},
+            "dark": {"color": "#F38BA8", "background": "#2E1E26"},
+        },
+    },
+}
+
+
+def _deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
+    """Return *base* recursively updated with *override* (new dict, no mutation)."""
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, Mapping) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def load_theme() -> dict[str, Any]:
+    """Load the document theme tokens, custom file over bundled over defaults.
+
+    Reads ``theme.yaml`` from the custom themes directory when present (via
+    `_resolve_asset_dir`), otherwise the bundled one, and deep-merges it over
+    `DEFAULT_THEME` so partial override files are safe.
+
+    Returns:
+        dict[str, Any]: Fully-populated theme token tree.
+    """
+    theme_path = Path(_resolve_asset_dir("theme.yaml", "themes_dir"), "theme.yaml")
+    if not theme_path.exists():
+        return DEFAULT_THEME
+    return _deep_merge(DEFAULT_THEME, open_file(theme_path) or {})
+
+
 def render_template(
     output_file: Path,
     template_name: str,
@@ -943,6 +1012,7 @@ def render_template(
         css_content=css_content,
         dark_css_content=dark_css_content,
         default_theme=default_theme,
+        theme=load_theme(),
     )
 
     output_file.write_text(rendered_output)

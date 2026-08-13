@@ -47,6 +47,15 @@
 .theme-toggle button:hover { background: rgba(0, 0, 0, .06); }
 .theme-toggle button[aria-pressed="true"] { background: #d8d8d8; color: #000; }
 @media print { .theme-toggle, .copy-btn { display: none !important; } }
+
+/* --- Theme tokens (themes/theme.yaml; custom/themes/theme.yaml overrides) --- */
+body { font-size: {{ theme.fonts.html.base_size }}em;{% if theme.fonts.html.family %} font-family: {{ theme.fonts.html.family }};{% endif %} }
+{% if theme.fonts.html.mono_family %}pre, code, kbd, samp { font-family: {{ theme.fonts.html.mono_family }}, monospace; }
+{% endif %}
+{% for kind, c in theme.admonitions.items() %}
+.admonitionblock.{{ kind }} > table { background: {{ c.light.background }}; border-left: 3px solid {{ c.light.color }}; }
+.admonitionblock.{{ kind }} td.icon .title { color: {{ c.light.color }}; }
+{% endfor %}
 </style>
 {% if dark_css_content %}
 <style id="mscp-dark-theme" media="(prefers-color-scheme: dark)">
@@ -61,6 +70,12 @@
 .theme-toggle button { color: #bbb; }
 .theme-toggle button:hover { background: rgba(255, 255, 255, .08); }
 .theme-toggle button[aria-pressed="true"] { background: #4a4a4a; color: #fff; }
+
+/* --- Theme tokens, dark variants (themes/theme.yaml) --- */
+{% for kind, c in theme.admonitions.items() %}
+.admonitionblock.{{ kind }} > table { background: {{ c.dark.background }}; border-left: 3px solid {{ c.dark.color }}; }
+.admonitionblock.{{ kind }} td.icon .title { color: {{ c.dark.color }}; }
+{% endfor %}
 </style>
 <script>
 /* Apply the saved theme before first paint to avoid a flash of the wrong theme. */

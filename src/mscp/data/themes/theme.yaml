@@ -1,0 +1,41 @@
+# =============================================================================
+# mSCP guidance document theme — shared by the typst PDF and Python HTML engines
+#
+# Copy this file to custom/themes/theme.yaml to override it. Any key you omit
+# falls back to the bundled default, so an override file only needs the tokens
+# you want to change, e.g.:
+#
+#   admonitions:
+#     warning:
+#       light: { color: "#B26A00", background: "#FFF9C4" }
+#
+# fonts.pdf.family / mono_family accept any font installed on the system
+# (typst discovers system fonts); null keeps the engine default.
+# fonts.html.* are emitted as CSS overrides on top of the stylesheet.
+# =============================================================================
+
+fonts:
+  pdf:
+    family: null        # body font for the PDF, e.g. "Helvetica Neue"
+    mono_family: null   # code-block font for the PDF, e.g. "Menlo"
+    base_size: 10       # pt — PDF body text size
+  html:
+    family: null        # CSS font-family for the HTML body
+    mono_family: null   # CSS font-family for HTML code blocks
+    base_size: 1.0      # em — HTML body text size
+
+# Admonition callout colors. `color` tints the border, icon, and label;
+# `background` fills the box. Each kind carries a light and a dark variant.
+admonitions:
+  note:
+    light: { color: "#1565C0", background: "#E8F1FB" }
+    dark: { color: "#89B4FA", background: "#223047" }
+  important:
+    light: { color: "#B26A00", background: "#FFF4E5" }
+    dark: { color: "#F9E2AF", background: "#2E2A1E" }
+  warning:
+    light: { color: "#8A6D00", background: "#FFF9C4" }
+    dark: { color: "#F9E2AF", background: "#3A331A" }
+  alert:
+    light: { color: "#C62828", background: "#FDECEA" }
+    dark: { color: "#F38BA8", background: "#2E1E26" }
